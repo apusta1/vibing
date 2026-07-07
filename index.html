@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Vibe Coding — Presentasi Interaktif</title>
+<style>
+  :root{
+    --void:#05060b;
+    --panel:#0b1020;
+    --holo:#38e1ff;      /* cyan */
+    --violet:#a97bff;    /* violet */
+    --line:rgba(56,225,255,.28);
+    --ink:#eaf4ff;
+    --muted:#8fa6c4;
+    --hud:'Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;
+    --mono:ui-monospace,'Cascadia Mono','Consolas','SFMono-Regular',monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--void);color:var(--ink);
+    font-family:var(--hud);touch-action:none;overscroll-behavior:none;}
+
+  /* ---------- deep-space background ---------- */
+  #space{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(1200px 700px at 78% 12%, rgba(169,123,255,.16), transparent 60%),
+      radial-gradient(1100px 800px at 12% 88%, rgba(56,225,255,.14), transparent 60%),
+      radial-gradient(60% 60% at 50% 40%, #0a1122 0%, #05060b 70%);
+  }
+  #stars{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.9;
+    background-image:
+      radial-gradient(1.4px 1.4px at 20% 30%, #cfe9ff 40%, transparent),
+      radial-gradient(1.2px 1.2px at 70% 60%, #bcd6ff 40%, transparent),
+      radial-gradient(1px 1px at 40% 80%, #9fc6ff 40%, transparent),
+      radial-gradient(1.6px 1.6px at 85% 25%, #e6f4ff 40%, transparent),
+      radial-gradient(1px 1px at 55% 15%, #a9ccff 40%, transparent),
+      radial-gradient(1.2px 1.2px at 12% 65%, #d6ecff 40%, transparent),
+      radial-gradient(1px 1px at 90% 82%, #b7d8ff 40%, transparent),
+      radial-gradient(1.3px 1.3px at 33% 48%, #eaf6ff 40%, transparent);
+    background-repeat:repeat;background-size:520px 520px;
+    animation:drift 90s linear infinite;}
+  @keyframes drift{to{background-position:520px 260px;}}
+  #grid{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.10;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:64px 64px;
+    -webkit-mask-image:radial-gradient(80% 80% at 50% 50%,#000 40%,transparent 85%);
+            mask-image:radial-gradient(80% 80% at 50% 50%,#000 40%,transparent 85%);}
+  #scan{position:fixed;inset:0;z-index:6;pointer-events:none;mix-blend-mode:overlay;opacity:.05;
+    background:repeating-linear-gradient(0deg,#fff 0 1px,transparent 1px 3px);}
+  #vign{position:fixed;inset:0;z-index:6;pointer-events:none;
+    box-shadow:inset 0 0 240px 40px rgba(0,0,0,.7);}
+
+  /* ---------- world / camera ---------- */
+  #stage{position:fixed;inset:0;z-index:2;touch-action:none;cursor:grab;}
+  #stage.grabbing{cursor:grabbing;}
+  #world{position:absolute;left:0;top:0;width:0;height:0;will-change:transform;}
+  .slide{position:absolute;transform-origin:50% 50%;}
+  .slide .frame{position:relative;width:100%;height:100%;border-radius:10px;overflow:hidden;
+    background:#0a0f1c;
+    box-shadow:0 30px 80px -20px rgba(0,0,0,.8),0 0 0 1px rgba(120,170,255,.10);
+    transition:box-shadow .4s ease, filter .4s ease;}
+  .slide img{display:block;width:100%;height:100%;object-fit:cover;user-select:none;-webkit-user-drag:none;}
+  .slide.dim .frame{filter:brightness(.5) saturate(.75);}
+  .slide.active .frame{
+    box-shadow:0 0 0 1px var(--holo),0 0 40px rgba(56,225,255,.35),
+               0 40px 120px -30px rgba(0,0,0,.9);}
+  .slide .tag{position:absolute;left:14px;bottom:12px;z-index:3;
+    font:600 13px/1 var(--mono);letter-spacing:.14em;color:#dff4ff;
+    padding:6px 10px;border-radius:999px;
+    background:rgba(6,12,26,.62);border:1px solid rgba(120,190,255,.35);
+    backdrop-filter:blur(6px);opacity:0;transform:translateY(6px);transition:.35s;}
+  .slide.active .tag{opacity:1;transform:none;}
+
+  /* link hotspot outline on the focused, linked slide */
+  .slide .hot{position:absolute;z-index:2;border-radius:8px;pointer-events:none;
+    border:2px dashed rgba(56,225,255,.0);transition:border-color .4s;}
+  .slide.active.linked .hot{border-color:rgba(56,225,255,.55);
+    box-shadow:inset 0 0 30px rgba(56,225,255,.12);animation:hotpulse 2.4s ease-in-out infinite;}
+  @keyframes hotpulse{50%{border-color:rgba(169,123,255,.8);}}
+
+  /* ---------- HUD targeting reticle ---------- */
+  #reticle{position:fixed;z-index:4;pointer-events:none;left:0;top:0;
+    transition:opacity .3s;opacity:0;}
+  #reticle .c{position:absolute;width:26px;height:26px;border:2px solid var(--holo);
+    filter:drop-shadow(0 0 6px rgba(56,225,255,.8));}
+  #reticle .tl{left:0;top:0;border-right:0;border-bottom:0;}
+  #reticle .tr{right:0;top:0;border-left:0;border-bottom:0;}
+  #reticle .bl{left:0;bottom:0;border-right:0;border-top:0;}
+  #reticle .br{right:0;bottom:0;border-left:0;border-top:0;}
+  body.focusmode #reticle{opacity:.9;}
+
+  /* ---------- chrome / HUD panels ---------- */
+  .hud{position:fixed;z-index:8;color:var(--ink);}
+  #brand{left:22px;top:18px;}
+  #brand .kick{font:700 11px/1 var(--mono);letter-spacing:.42em;color:var(--holo);opacity:.85;}
+  #brand .ttl{font:800 20px/1.05 var(--hud);letter-spacing:.02em;margin-top:7px;
+    text-shadow:0 0 22px rgba(56,225,255,.25);}
+  #brand .sub{font:500 11.5px/1.35 var(--hud);color:var(--muted);margin-top:5px;max-width:270px;}
+
+  #counter{right:22px;top:18px;text-align:right;}
+  #counter .big{font:800 30px/1 var(--mono);letter-spacing:.04em;
+    background:linear-gradient(180deg,#eafbff,#7fd7ff);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  #counter .lbl{font:600 10px/1 var(--mono);letter-spacing:.34em;color:var(--muted);margin-top:6px;}
+
+  /* dock */
+  #dock{left:50%;bottom:20px;transform:translateX(-50%);
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;border-radius:16px;
+    background:linear-gradient(180deg,rgba(12,20,40,.82),rgba(8,13,28,.9));
+    border:1px solid rgba(120,190,255,.22);backdrop-filter:blur(12px);
+    box-shadow:0 20px 60px -20px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05);}
+  .btn{appearance:none;border:1px solid rgba(120,190,255,.25);
+    background:rgba(20,32,58,.6);color:var(--ink);
+    width:46px;height:46px;border-radius:12px;display:grid;place-items:center;
+    cursor:pointer;transition:.16s;}
+  .btn:hover{border-color:var(--holo);box-shadow:0 0 18px rgba(56,225,255,.35);transform:translateY(-1px);}
+  .btn:active{transform:translateY(0) scale(.96);}
+  .btn svg{width:22px;height:22px;stroke:#dff4ff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .btn.primary{width:56px;height:56px;background:linear-gradient(180deg,rgba(56,225,255,.22),rgba(169,123,255,.18));
+    border-color:rgba(120,220,255,.5);}
+  .btn.primary svg{width:26px;height:26px;stroke:#fff;}
+  #rail{display:flex;gap:7px;align-items:center;padding:0 6px;}
+  .pip{width:8px;height:8px;border-radius:50%;background:rgba(150,190,255,.28);
+    cursor:pointer;transition:.2s;}
+  .pip.on{background:var(--holo);box-shadow:0 0 10px rgba(56,225,255,.9);transform:scale(1.35);}
+
+  /* right utility stack */
+  #tools{right:22px;bottom:20px;display:flex;flex-direction:column;gap:9px;}
+  #tools .btn{width:44px;height:44px;}
+
+  /* explore hint */
+  #recenter{left:50%;top:22px;transform:translateX(-50%);
+    display:flex;align-items:center;gap:9px;padding:8px 14px;border-radius:999px;
+    background:rgba(10,16,34,.8);border:1px solid rgba(169,123,255,.5);
+    font:600 12px/1 var(--mono);letter-spacing:.14em;color:#e9dcff;cursor:pointer;
+    opacity:0;pointer-events:none;transition:.3s;box-shadow:0 0 24px rgba(169,123,255,.3);}
+  body.explore #recenter{opacity:1;pointer-events:auto;}
+  #recenter .dot{width:8px;height:8px;border-radius:50%;background:var(--violet);
+    box-shadow:0 0 10px var(--violet);animation:hotpulse 1.6s infinite;}
+
+  /* open-link badge */
+  #openbadge{left:50%;bottom:96px;transform:translateX(-50%);
+    display:none;align-items:center;gap:9px;padding:10px 16px;border-radius:999px;
+    background:linear-gradient(180deg,rgba(56,225,255,.2),rgba(12,20,40,.86));
+    border:1px solid var(--holo);font:700 12px/1 var(--mono);letter-spacing:.14em;color:#eafcff;
+    box-shadow:0 0 26px rgba(56,225,255,.45);cursor:pointer;
+    animation:hotpulse 2s infinite;}
+  body.focusmode.haslink #openbadge{display:flex;}
+
+  /* ---------- intro overlay ---------- */
+  #intro{position:fixed;inset:0;z-index:20;display:grid;place-items:center;
+    background:radial-gradient(80% 80% at 50% 45%,rgba(10,16,34,.7),rgba(5,6,11,.96));
+    backdrop-filter:blur(3px);transition:opacity .6s;}
+  #intro.hide{opacity:0;pointer-events:none;}
+  .card{text-align:center;padding:40px 44px;max-width:560px;}
+  .card .k{font:700 12px/1 var(--mono);letter-spacing:.5em;color:var(--holo);}
+  .card h1{font:800 clamp(30px,6vw,52px)/1.05 var(--hud);margin:18px 0 6px;letter-spacing:.01em;
+    text-shadow:0 0 40px rgba(56,225,255,.3);}
+  .card p{color:var(--muted);font-size:14.5px;line-height:1.55;margin:0 auto 26px;max-width:440px;}
+  .card .who{color:#cfe6ff;font-size:13px;letter-spacing:.06em;margin-bottom:26px;}
+  .enter{appearance:none;cursor:pointer;font:800 15px/1 var(--hud);letter-spacing:.14em;
+    color:#04121c;padding:16px 34px;border-radius:14px;border:0;
+    background:linear-gradient(180deg,#7ff0ff,#38e1ff);
+    box-shadow:0 0 40px rgba(56,225,255,.5),0 14px 40px -12px rgba(0,0,0,.7);
+    transition:.18s;}
+  .enter:hover{transform:translateY(-2px);box-shadow:0 0 60px rgba(56,225,255,.7);}
+  .hintbar{margin-top:24px;font:600 11px/1.6 var(--mono);letter-spacing:.1em;color:#6f88a8;}
+  .hintbar b{color:#a9c6ff;font-weight:700;}
+
+  /* help sheet */
+  #help{position:fixed;inset:0;z-index:19;display:none;place-items:center;
+    background:rgba(5,6,11,.86);backdrop-filter:blur(4px);}
+  #help.show{display:grid;}
+  .sheet{width:min(560px,90vw);padding:30px 32px;border-radius:18px;
+    background:linear-gradient(180deg,rgba(14,22,44,.96),rgba(8,13,28,.98));
+    border:1px solid rgba(120,190,255,.22);box-shadow:0 30px 90px -20px #000;}
+  .sheet h2{margin:0 0 4px;font:800 20px/1 var(--hud);letter-spacing:.04em;}
+  .sheet .k{font:700 11px/1 var(--mono);letter-spacing:.4em;color:var(--holo);}
+  .row{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px dashed rgba(120,170,255,.14);}
+  .row:last-child{border-bottom:0;}
+  .row .g{flex:0 0 118px;font:700 12px/1.3 var(--mono);color:#bfe6ff;letter-spacing:.05em;}
+  .row .d{color:var(--muted);font-size:13.5px;line-height:1.4;}
+  .close{margin-top:22px;width:100%;padding:13px;border-radius:12px;cursor:pointer;
+    border:1px solid rgba(120,190,255,.3);background:rgba(20,32,58,.6);color:#dff4ff;
+    font:700 13px/1 var(--hud);letter-spacing:.1em;}
+
+  @media (max-width:640px){
+    #brand .sub{display:none;} #counter .big{font-size:24px;}
+    .btn{width:42px;height:42px;} .btn.primary{width:50px;height:50px;}
+    #tools{display:none;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    #stars,#reticle .c,.slide.active.linked .hot,#openbadge,#recenter .dot{animation:none!important;}
+  }
+</style>
+</head>
+<body>
+  <div id="space"></div><div id="stars"></div><div id="grid"></div>
+
+  <div id="stage">
+    <div id="world"></div>
+  </div>
+
+  <div id="reticle"><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i></div>
+  <div id="scan"></div><div id="vign"></div>
+
+  <!-- HUD -->
+  <div class="hud" id="brand">
+    <div class="kick">MAHASGAMES · IFP DECK</div>
+    <div class="ttl">VIBE&nbsp;CODING</div>
+    <div class="sub">Pengembangan multimedia untuk Papan Pintar (Interactive Flat Panel)</div>
+  </div>
+
+  <div class="hud" id="counter">
+    <div class="big"><span id="cur">01</span><span style="opacity:.4">/</span><span id="tot">12</span></div>
+    <div class="lbl" id="slabel">PEMBUKA</div>
+  </div>
+
+  <div class="hud" id="recenter"><span class="dot"></span>MODE JELAJAH · Ketuk untuk kembali ke halaman</div>
+
+  <div class="hud" id="openbadge">↗ KETUK HALAMAN UNTUK BUKA TAUTAN</div>
+
+  <div class="hud" id="dock">
+    <button class="btn" id="prev" title="Sebelumnya (←)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div id="rail"></div>
+    <button class="btn primary" id="next" title="Berikutnya (→ / Spasi)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    <button class="btn" id="overview" title="Peta semua halaman (O)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+  </div>
+
+  <div class="hud" id="tools">
+    <button class="btn" id="zin" title="Perbesar (+)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3-3"/></svg></button>
+    <button class="btn" id="zout" title="Perkecil (−)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3-3"/></svg></button>
+    <button class="btn" id="fit" title="Fokus halaman ini"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <button class="btn" id="fs" title="Layar penuh (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg></button>
+    <button class="btn" id="helpbtn" title="Bantuan"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.9.4-1 1-1 1.7M12 17h.01"/></svg></button>
+  </div>
+
+  <!-- intro -->
+  <div id="intro">
+    <div class="card">
+      <div class="k">PRESENTASI INTERAKTIF</div>
+      <h1>VIBE&nbsp;CODING</h1>
+      <p>Untuk pengembangan multimedia yang dapat digunakan di Papan Pintar (IFP / Interactive Flat Panel).</p>
+      <div class="who">Arkhadi Pustaka &nbsp;·&nbsp; 8 Juli 2026</div>
+      <button class="enter" id="start">MULAI PRESENTASI ▸</button>
+      <div class="hintbar">
+        <b>Geser</b> ganti halaman &nbsp;·&nbsp; <b>Cubit</b> zoom &nbsp;·&nbsp; <b>Seret</b> jelajah &nbsp;·&nbsp; <b>Ketuk</b> halaman buka tautan
+      </div>
+    </div>
+  </div>
+
+  <!-- help -->
+  <div id="help">
+    <div class="sheet">
+      <div class="k">PANDUAN NAVIGASI</div>
+      <h2>Cara mengontrol presentasi</h2>
+      <div class="row"><div class="g">Geser ↔</div><div class="d">Sentak kiri / kanan untuk halaman berikut / sebelumnya.</div></div>
+      <div class="row"><div class="g">Cubit</div><div class="d">Dua jari untuk memperbesar & memperkecil di titik mana pun.</div></div>
+      <div class="row"><div class="g">Seret</div><div class="d">Satu jari untuk menggeser (menjelajah) seluruh kanvas.</div></div>
+      <div class="row"><div class="g">Ketuk halaman</div><div class="d">Membuka tautan aktif halaman (Observe, Lab, Kubus, VM Numerasi, ChatGPT) di tab baru.</div></div>
+      <div class="row"><div class="g">Peta ▦</div><div class="d">Lihat semua halaman sekaligus; ketuk salah satu untuk terbang ke sana.</div></div>
+      <div class="row"><div class="g">Keyboard</div><div class="d">← → / Spasi navigasi · +/− zoom · O peta · F layar penuh · Home awal.</div></div>
+      <button class="close" id="helpclose">MENGERTI</button>
+    </div>
+  </div>
+
+<script>
+(()=>{
+"use strict";
+const SW=2000, SH=1126;                 // native slide pixel size (world units)
+const N=12;
+const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+// per-slide metadata: label + optional link + hotspot geometry (fraction of slide)
+const LINKS={
+  1:{url:'https://apusta1.github.io/observe/',  hot:[0,0.0141,1,0.9717]},
+  2:{url:'https://omaggiotech.github.io/lab/',  hot:[0.0440,0,0.9121,1]},
+  3:{url:'https://omaggiotech.github.io/kubus/', hot:[0.0356,0,0.9287,1]},
+  4:{url:'https://apusta1.github.io/vmnumerasi/',hot:[0,0.0394,1,0.9212]},
+  9:{url:'https://chatgpt.com/share/6a4cd30b-48b4-83ec-8e20-f5a428fc75d2', hot:[0,0.0677,1,0.8646]}
+};
+const LABELS=['PEMBUKA','OBSERVE','LAB BATUAN','KUBUS · JARING','VM NUMERASI','AGENDA',
+              'APA ITU AI?','MENGENAL AI','ALUR KERJA','SESI CHATGPT','LANGKAH','PENUTUP'];
+
+// ---- lay slides along a flowing flight-path (Prezi-style constellation) ----
+const slides=[];
+const STEPX=2760, AMP=1360, FREQ=0.62, MAXROT=6.5;
+for(let i=0;i<N;i++){
+  const x=i*STEPX;
+  const y=Math.sin(i*FREQ)*AMP;
+  const rot=Math.cos(i*FREQ)*MAXROT + (i%2? -1.5:1.2);
+  slides.push({i,x,y,rot,link:LINKS[i]||null});
+}
+
+// ---- build DOM ----
+const world=document.getElementById('world');
+const path=document.createElementNS('http://www.w3.org/2000/svg','svg');
+// flight path connecting slide centers
+{
+  const minX=Math.min(...slides.map(s=>s.x))-SW, maxX=Math.max(...slides.map(s=>s.x))+SW;
+  const minY=Math.min(...slides.map(s=>s.y))-SH, maxY=Math.max(...slides.map(s=>s.y))+SH;
+  path.setAttribute('style',`position:absolute;left:${minX}px;top:${minY}px;overflow:visible;pointer-events:none;`);
+  path.setAttribute('width',maxX-minX); path.setAttribute('height',maxY-minY);
+  let d='';
+  slides.forEach((s,k)=>{ d+=(k?'L':'M')+(s.x-minX)+' '+(s.y-minY)+' '; });
+  const mk=(w,c,o)=>{const p=document.createElementNS(path.namespaceURI,'path');
+    p.setAttribute('d',d);p.setAttribute('fill','none');p.setAttribute('stroke',c);
+    p.setAttribute('stroke-width',w);p.setAttribute('stroke-linecap','round');
+    p.setAttribute('stroke-linejoin','round');p.setAttribute('opacity',o);
+    p.setAttribute('stroke-dasharray','2 26');return p;};
+  path.appendChild(mk(10,'#38e1ff',.10));
+  path.appendChild(mk(3,'#8fd8ff',.35));
+  world.appendChild(path);
+}
+
+const els=[];
+slides.forEach(s=>{
+  const d=document.createElement('div');
+  d.className='slide'+(s.link?' linked':'');
+  d.dataset.index=s.i;
+  d.style.left=s.x+'px'; d.style.top=s.y+'px';
+  d.style.width=SW+'px'; d.style.height=SH+'px';
+  d.style.transform=`translate(-50%,-50%) rotate(${s.rot}deg)`;
+  const num=String(s.i+1).padStart(2,'0');
+  let hot='';
+  if(s.link){const h=s.link.hot;
+    hot=`<div class="hot" style="left:${h[0]*100}%;top:${h[1]*100}%;width:${h[2]*100}%;height:${h[3]*100}%"></div>`;}
+  d.innerHTML=`<div class="frame"><img src="slides/slide-${num}.png" alt="Halaman ${s.i+1}" loading="${s.i<3?'eager':'lazy'}">${hot}</div>
+               <div class="tag">${num} · ${LABELS[s.i]}${s.link?' · ↗ TAUTAN':''}</div>`;
+  world.appendChild(d);
+  els.push(d);
+});
+
+// rail pips
+const rail=document.getElementById('rail');
+slides.forEach(s=>{const p=document.createElement('div');p.className='pip';p.dataset.index=s.i;
+  p.title='Halaman '+(s.i+1);rail.appendChild(p);});
+const pips=[...rail.children];
+document.getElementById('tot').textContent=String(N).padStart(2,'0');
+
+// ---- camera ----
+const stage=document.getElementById('stage');
+let cam={cx:slides[0].x, cy:slides[0].y, s:1, a:0};   // world center, scale, angle(deg)
+let focused=0, mode='focus';
+let VW=innerWidth, VH=innerHeight;
+
+function focusScale(){return Math.min(0.9*VW/SW, 0.9*VH/SH);}
+function clampScale(v){return Math.max(0.02, Math.min(2.2, v));}
+
+function apply(){
+  const cx=VW/2, cy=VH/2;
+  world.style.transform=
+    `translate(${cx}px,${cy}px) rotate(${cam.a}deg) scale(${cam.s}) translate(${-cam.cx}px,${-cam.cy}px)`;
+  positionReticle();
+}
+// screen -> world
+function toWorld(px,py){
+  const cx=VW/2, cy=VH/2, A=cam.a*Math.PI/180, ca=Math.cos(-A), sa=Math.sin(-A);
+  const dx=(px-cx)/cam.s, dy=(py-cy)/cam.s;
+  return {x:cam.cx + (ca*dx - sa*dy), y:cam.cy + (sa*dx + ca*dy)};
+}
+
+function stateForFocus(i){const s=slides[i];return{cx:s.x,cy:s.y,s:focusScale(),a:-s.rot};}
+function stateForOverview(){
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  slides.forEach(s=>{minX=Math.min(minX,s.x-SW/2);maxX=Math.max(maxX,s.x+SW/2);
+                     minY=Math.min(minY,s.y-SH/2);maxY=Math.max(maxY,s.y+SH/2);});
+  const w=maxX-minX,h=maxY-minY,pad=1.16;
+  return{cx:(minX+maxX)/2,cy:(minY+maxY)/2,s:clampScale(Math.min(VW/(w*pad),VH/(h*pad))),a:0};
+}
+
+// ---- animation ----
+let anim=null;
+const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+function flyTo(target,dur){
+  if(reduce)dur=1;
+  cancelAnimationFrame(anim);
+  const from={...cam}, t0=performance.now();
+  return new Promise(res=>{
+    (function step(now){
+      const p=Math.min(1,(now-t0)/dur), e=ease(p);
+      cam.cx=from.cx+(target.cx-from.cx)*e;
+      cam.cy=from.cy+(target.cy-from.cy)*e;
+      cam.s =from.s +(target.s -from.s )*e;
+      cam.a =from.a +(target.a -from.a )*e;
+      apply();
+      if(p<1)anim=requestAnimationFrame(step); else res();
+    })(t0);
+  });
+}
+
+// ---- state / UI ----
+function setFocus(i,animate=true){
+  i=Math.max(0,Math.min(N-1,i));
+  focused=i; mode='focus';
+  document.body.classList.add('focusmode');
+  document.body.classList.remove('explore');
+  document.body.classList.toggle('haslink', !!slides[i].link);
+  els.forEach((el,k)=>{el.classList.toggle('active',k===i);el.classList.toggle('dim',k!==i);});
+  pips.forEach((p,k)=>p.classList.toggle('on',k===i));
+  document.getElementById('cur').textContent=String(i+1).padStart(2,'0');
+  document.getElementById('slabel').textContent=LABELS[i];
+  return flyTo(stateForFocus(i), animate?900:1);
+}
+function enterExplore(){mode='explore';document.body.classList.add('explore');
+  document.body.classList.remove('focusmode','haslink');
+  els.forEach(el=>el.classList.remove('dim'));}
+function overview(){mode='overview';document.body.classList.remove('focusmode','haslink');
+  document.body.classList.add('explore');
+  els.forEach(el=>el.classList.remove('dim','active'));
+  pips.forEach(p=>p.classList.remove('on'));
+  flyTo(stateForOverview(),reduce?1:1000);}
+
+function positionReticle(){
+  const r=document.getElementById('reticle');
+  if(!document.body.classList.contains('focusmode')){r.style.opacity=0;return;}
+  const s=slides[focused];
+  // slide center in screen space
+  const A=cam.a*Math.PI/180, ca=Math.cos(A), sa=Math.sin(A);
+  const dx=(s.x-cam.cx)*cam.s, dy=(s.y-cam.cy)*cam.s;
+  const sx=VW/2 + (ca*dx - sa*dy), sy=VH/2 + (sa*dx + ca*dy);
+  const w=SW*cam.s, h=SH*cam.s, pad=18;
+  r.style.width=(w+pad*2)+'px'; r.style.height=(h+pad*2)+'px';
+  r.style.transform=`translate(${sx-w/2-pad}px,${sy-h/2-pad}px) rotate(${cam.a+s.rot}deg)`;
+}
+
+// ---- navigation ----
+function next(){ if(focused<N-1) setFocus(focused+1); }
+function prev(){ if(focused>0) setFocus(focused-1); }
+
+// ---- pointer gestures ----
+const pts=new Map();
+let g=null; // active gesture info
+stage.addEventListener('pointerdown',e=>{
+  try{stage.setPointerCapture(e.pointerId);}catch(_){}
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pts.size===1){
+    g={mode:'maybe',x0:e.clientX,y0:e.clientY,lx:e.clientX,ly:e.clientY,t0:performance.now(),moved:0};
+  }else if(pts.size===2){
+    const a=[...pts.values()];
+    g={mode:'pinch',pd:dist(a[0],a[1]),pm:mid(a[0],a[1])};
+  }
+});
+stage.addEventListener('pointermove',e=>{
+  if(!pts.has(e.pointerId))return;
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(!g)return;
+  if(g.mode==='pinch'&&pts.size>=2){
+    const a=[...pts.values()], nd=dist(a[0],a[1]), nm=mid(a[0],a[1]);
+    if(g.pd>0){
+      const wAt=toWorld(g.pm.x,g.pm.y);      // world point under previous midpoint
+      cam.s=clampScale(cam.s*(nd/g.pd));
+      // keep that world point under the new midpoint
+      const A=cam.a*Math.PI/180, ca=Math.cos(-A), sa=Math.sin(-A);
+      const dx=(nm.x-VW/2)/cam.s, dy=(nm.y-VH/2)/cam.s;
+      cam.cx=wAt.x-(ca*dx - sa*dy);
+      cam.cy=wAt.y-(sa*dx + ca*dy);
+      apply();
+    }
+    g.pd=nd; g.pm=nm;
+    enterExploreSoft();
+    return;
+  }
+  if(pts.size===1){
+    const dx=e.clientX-g.lx, dy=e.clientY-g.ly;
+    g.lx=e.clientX; g.ly=e.clientY;
+    g.moved+=Math.hypot(dx,dy);
+    if(g.moved>10){                 // it's a drag -> live pan
+      if(g.mode==='maybe'){g.mode='pan';stage.classList.add('grabbing');}
+      const A=cam.a*Math.PI/180, ca=Math.cos(-A), sa=Math.sin(-A);
+      cam.cx-=(ca*dx - sa*dy)/cam.s;
+      cam.cy-=(sa*dx + ca*dy)/cam.s;
+      apply();
+    }
+  }
+});
+function endPointer(e){
+  if(!pts.has(e.pointerId))return;
+  const wasG=g; pts.delete(e.pointerId); stage.classList.remove('grabbing');
+  if(pts.size===1){ // dropped from pinch to one finger: restart drag baseline
+    const p=[...pts.values()][0];
+    g={mode:'pan',x0:p.x,y0:p.y,lx:p.x,ly:p.y,t0:performance.now(),moved:99};
+    return;
+  }
+  if(pts.size>0)return;
+  if(!wasG){g=null;return;}
+  const dt=performance.now()-wasG.t0;
+  const tdx=e.clientX-wasG.x0, tdy=e.clientY-wasG.y0, tdist=Math.hypot(tdx,tdy);
+  const vx=Math.abs(tdx)/Math.max(1,dt);
+  g=null;
+
+  // TAP
+  if(wasG.mode==='maybe' && tdist<12 && dt<400){ handleTap(e.clientX,e.clientY); return; }
+
+  // SWIPE (fast, mostly horizontal) — works in any mode, re-locks to a page
+  const horizFlick = Math.abs(tdx)>Math.abs(tdy)*1.6 &&
+                     (vx>0.45 || Math.abs(tdx)>VW*0.16);
+  if(wasG.mode==='pan' && horizFlick){
+    if(tdx<0) next(); else prev();
+    return;
+  }
+  // otherwise: user free-panned -> stay in explore
+  if(wasG.mode==='pan') enterExplore();
+}
+stage.addEventListener('pointerup',endPointer);
+stage.addEventListener('pointercancel',endPointer);
+
+let softTimer=null;
+function enterExploreSoft(){ // during pinch, mark explore but keep reticle logic light
+  document.body.classList.add('explore');
+  document.body.classList.remove('focusmode','haslink');
+}
+
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function mid(a,b){return {x:(a.x+b.x)/2,y:(a.y+b.y)/2};}
+
+function handleTap(px,py){
+  const el=document.elementFromPoint(px,py);
+  const slideEl=el&&el.closest?el.closest('.slide'):null;
+  if(slideEl){
+    const idx=+slideEl.dataset.index;
+    // tap on the currently focused slide -> open its link (if any)
+    if(idx===focused && document.body.classList.contains('focusmode')){
+      const lk=slides[idx].link;
+      if(lk){ openLink(lk.url); return; }
+      return; // focused, no link -> do nothing (use arrows/swipe to move)
+    }
+    // tapped a different slide (overview/explore) -> fly to it
+    setFocus(idx);
+    return;
+  }
+  // tapped empty space while exploring -> refocus current
+  if(mode!=='focus') setFocus(focused);
+}
+function openLink(url){
+  const w=window.open(url,'_blank','noopener');
+  if(!w){ location.href=url; }   // popup blocked fallback
+}
+
+// wheel zoom (desktop / trackpad on IFP mini-pc)
+stage.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const wAt=toWorld(e.clientX,e.clientY);
+  const factor=Math.exp(-e.deltaY*0.0015);
+  cam.s=clampScale(cam.s*factor);
+  const A=cam.a*Math.PI/180, ca=Math.cos(-A), sa=Math.sin(-A);
+  const dx=(e.clientX-VW/2)/cam.s, dy=(e.clientY-VH/2)/cam.s;
+  cam.cx=wAt.x-(ca*dx - sa*dy);
+  cam.cy=wAt.y-(sa*dx + ca*dy);
+  apply(); enterExplore();
+},{passive:false});
+
+// ---- controls ----
+document.getElementById('next').onclick=next;
+document.getElementById('prev').onclick=prev;
+document.getElementById('overview').onclick=()=>mode==='overview'?setFocus(focused):overview();
+document.getElementById('fit').onclick=()=>setFocus(focused);
+document.getElementById('zin').onclick=()=>zoomBy(1.25);
+document.getElementById('zout').onclick=()=>zoomBy(0.8);
+pips.forEach(p=>p.onclick=()=>setFocus(+p.dataset.index));
+document.getElementById('openbadge').onclick=()=>{const lk=slides[focused].link;if(lk)openLink(lk.url);};
+document.getElementById('recenter').onclick=()=>setFocus(focused);
+
+function zoomBy(f){
+  cam.s=clampScale(cam.s*f); apply();
+  if(mode==='focus') enterExplore();
+}
+
+// fullscreen
+function toggleFS(){
+  if(!document.fullscreenElement){(document.documentElement.requestFullscreen||(()=>{})).call(document.documentElement);}
+  else document.exitFullscreen&&document.exitFullscreen();
+}
+document.getElementById('fs').onclick=toggleFS;
+
+// help
+const help=document.getElementById('help');
+document.getElementById('helpbtn').onclick=()=>help.classList.add('show');
+document.getElementById('helpclose').onclick=()=>help.classList.remove('show');
+help.onclick=e=>{if(e.target===help)help.classList.remove('show');};
+
+// keyboard
+addEventListener('keydown',e=>{
+  if(help.classList.contains('show')){if(e.key==='Escape')help.classList.remove('show');return;}
+  switch(e.key){
+    case 'ArrowRight':case ' ':case 'PageDown':e.preventDefault();next();break;
+    case 'ArrowLeft':case 'PageUp':e.preventDefault();prev();break;
+    case 'Home':setFocus(0);break;
+    case 'End':setFocus(N-1);break;
+    case '+':case '=':zoomBy(1.25);break;
+    case '-':case '_':zoomBy(0.8);break;
+    case 'o':case 'O':mode==='overview'?setFocus(focused):overview();break;
+    case 'f':case 'F':toggleFS();break;
+    case 'Escape':if(mode!=='focus')setFocus(focused);break;
+  }
+});
+
+// resize
+addEventListener('resize',()=>{VW=innerWidth;VH=innerHeight;
+  if(mode==='focus')cam=Object.assign(cam,stateForFocus(focused));
+  else if(mode==='overview')cam=Object.assign(cam,stateForOverview());
+  apply();});
+
+// ---- boot ----
+document.getElementById('start').onclick=()=>{
+  document.getElementById('intro').classList.add('hide');
+  if(document.documentElement.requestFullscreen){
+    document.documentElement.requestFullscreen().catch(()=>{});
+  }
+  setFocus(0,false);
+  // gentle cinematic settle
+  if(!reduce){cam.s*=1.6;apply();flyTo(stateForFocus(0),1100);}
+};
+// initialize view under the intro so it's ready
+cam=Object.assign(cam,stateForFocus(0)); apply();
+setTimeout(()=>{els.forEach((el,k)=>el.classList.toggle('active',k===0));},50);
+})();
+</script>
+</body>
+</html>
